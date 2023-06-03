@@ -21,8 +21,10 @@ require (
 	github.com/phuslu/iploc v1.0.20230201 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce // indirect
+	github.com/youmark/pkcs8 v0.0.0-20201027041543-1326539a0a0a // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
+	golang.org/x/crypto v0.0.0-20200302210943-78000ba7a073 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

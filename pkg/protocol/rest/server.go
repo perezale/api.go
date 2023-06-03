@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Copyright (C) 2018-2023 SCANOSS.COM
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+* Copyright (C) 2018-2023 SCANOSS.COM
+*
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 2 of the License, or
+* (at your option) any later version.
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details.
+* You should have received a copy of the GNU General Public License
+* along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
 // Package rest handles all the REST communication for the Scanning Service
@@ -20,6 +20,8 @@ package rest
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
@@ -34,6 +36,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jpillora/ipfilter"
 	zlog "github.com/scanoss/zap-logging-helper/pkg/logger"
+	"github.com/youmark/pkcs8"
 	myconfig "scanoss.com/go-api/pkg/config"
 	"scanoss.com/go-api/pkg/service"
 )
@@ -168,7 +171,7 @@ func loadPrivateKey(config *myconfig.ServerConfig) []byte {
 		if v == nil {
 			break
 		}
-		if v.Type == "RSA PRIVATE KEY" || v.Type == "PRIVATE KEY" {
+		if v.Type == "RSA PRIVATE KEY" || v.Type == "PRIVATE KEY" || v.Type == "ENCRYPTED PRIVATE KEY" {
 			zlog.S.Debugf("Private Key: %v - %v", v.Type, v.Headers)
 			// pvt, err := openssl.LoadPrivateKeyFromPEMWithPassword(encryptedPEM, passPhrase)
 			//nolint:staticcheck
@@ -187,7 +190,26 @@ func loadPrivateKey(config *myconfig.ServerConfig) []byte {
 					Bytes: pkey,
 				})
 			} else {
-				pkey = pem.EncodeToMemory(v)
+				if v.Type == "ENCRYPTED PRIVATE KEY" {
+					zlog.S.Debugln("Found ENCRYPTED PRIVATE KEY (%v)", config.TLS.KeyFile)
+					key, err := pkcs8.ParsePKCS8PrivateKey(v.Bytes, []byte(config.TLS.Password))
+					if err != nil {
+						zlog.S.Panicf("Failed to parse PKCS8 Key (%v): %v", config.TLS.KeyFile, err)
+					}
+					switch key := key.(type) {
+					case *rsa.PrivateKey:
+						pkey = x509.MarshalPKCS1PrivateKey(key)
+					case *ecdsa.PrivateKey:
+						pkey, err = x509.MarshalECPrivateKey(key)
+						if err != nil {
+							zlog.S.Panicf("Failed to unmarshal ecdsa Key (%v): %v", config.TLS.KeyFile, err)
+						}
+					default:
+						zlog.S.Panicf("parsed key is not an RSA or ECDSA private key: %v", err)
+					}
+				} else {
+					pkey = pem.EncodeToMemory(v)
+				}
 			}
 		} else {
 			zlog.S.Warnf("Unexpected certificate type (%v): %v", config.TLS.KeyFile, v.Type)
